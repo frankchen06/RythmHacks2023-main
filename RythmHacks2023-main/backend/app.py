@@ -31,7 +31,7 @@ def init():
 
 @app.route("/aistuff")
 def aistuff():
-    return headerify(chat.get_ai_stuff(scraper.get_image_tags(json.loads(request.args.get('links')))))
+    return headerify(chat.get_ai_stuff(scraper.get_image_tags(json.loads(request.args.get('links')), json.loads(request.args.get('titles')))))
 
 @app.route("/right")
 def right():
@@ -44,6 +44,6 @@ def handle_preflight():
     
 def headerify(response):
     response = jsonify(response)
-    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5173')
+    response.headers.add('Access-Control-Allow-Origin', 'http://localhost:5500')
     response.headers.add('Access-Control-Allow-Headers', 'ngrok-skip-browser-warning')
     return response

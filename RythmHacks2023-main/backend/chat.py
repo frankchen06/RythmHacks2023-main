@@ -22,7 +22,6 @@ def get_ai_stuff(tags):
     return {"images": image_urls, "description": response[0]}
 
 def generate_response(tags):
-    return "Content"
     # generate response
     conversation = [
         {"role": "user", "content": PROMPT.format(tags = ",\n".join(tags))}
@@ -37,7 +36,6 @@ def generate_response(tags):
     return content
 
 def generate_image(prompt):
-    return "Link"
     response = openai.Image.create(
         prompt=prompt,
         n=2,
