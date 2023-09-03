@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html" charset="utf-8">
+        <title>Finger Select</title>
+        <!-- Require the peer dependencies of handpose. -->
+        <script src="https://unpkg.com/@tensorflow/tfjs-core@3.7.0/dist/tf-core.js"></script>
+        <!-- You must explicitly require a TF.js backend if you're not using the tfs union bundle. -->
+        <script src="https://unpkg.com/@tensorflow/tfjs-backend-webgl@3.7.0/dist/tf-backend-webgl.js"></script>
+        <!-- The main handpose library -->
+        <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection@2.0.0/dist/hand-pose-detection.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915/hands.min.js"></script>
+        <!-- The fingerpose library -->
+        <script src="fingerpose.js" type="text/javascript"></script>
+        <link rel="stylesheet" href="./style.css">
+    <link rel="stylesheet" href="homepage.css"> 
+
+    </head>
+    <body>
+        <img hidden id="shirt1" src="https://imgs.search.brave.com/nXrBLh3NN9RB_M43VEVcb4QXxtJPQRV1RdU888S6oV0/rs:fit:860:0:0/g:ce/aHR0cHM6Ly9wbHVz/cG5nLmNvbS9pbWct/cG5nL3NoaXJ0LXBu/Zy1oZC1kcmVzcy1z/aGlydC1wbmctaW1h/Z2UtNzk4LnBuZw">
+        <img hidden id="shirt2" src="https://imgs.search.brave.com/cNrrd41kQE27PHHAlKCFetB1Hi4BcjEYECty_AGV4iw/rs:fit:860:0:0/g:ce/aHR0cHM6Ly9wbHVz/cG5nLmNvbS9pbWct/cG5nL3NoaXJ0LXBu/Zy1oZC10LXNoaXJ0/LXBuZy1pbWFnZS04/OTMucG5n">
+        <img hidden id="shirt3" src="https://saltyprinting.com/cdn/shop/products/lime-front-performance-long-sleeve-t-shirt_a825501f-ee44-4416-8cad-b27f9653a7c5_600x.png?v=1609441324">
+        <img hidden id="shirt4" src="https://saltyprinting.com/cdn/shop/products/colbalt-blue-front-performance-long-sleeve-t-shirt_7b6fcdf9-fd9e-4bcb-aa39-c177fdc1cc50_600x.png?v=1611348315">
+        <img hidden id="shirt5" src="https://images.teemill.com/vGLoHG72p8DPczu0Z9ZSIdvZX7ea35VSxxPaeq6KGc0Q0Xn4.png.png?w=1080&h=auto">
+
+        <header>
+            <a href="#" class="title">Clothify</a>
+            <nav>
+                <ul>
+                    <li><a href = "index.html" >Home</a></li>
+                    <li><a href = "try.html" >Try It!</a></li>
+                </ul>
+            </nav>
+            <div class="wrapper">
+                <h2>Revolutionize the way you <span></span><h2>
+            </div>
+        </header>
+
+        <div class="container">
+            <div class="video">
+                <div id="video-container">
+                    <video id="pose-video" class="layer" playsinline></video>
+                    <canvas id="pose-canvas" class="layer"></canvas>
+                    <div id="pose-result-left" class="layer pose-result"></div>
+                    <br>
+                    <div id="pose-result-right" class="layer pose-result"></div>
+                </div>
+            </div>
+        </div>
+        <div style="margin-left: 50%; transform: translate(-400px, -100px);">
+            <canvas width="800px" height="200px" id="can"></canvas>
+        </div>
+        <script>
+
+    const config = {
+    video: { width: 640, height: 480, fps: 30 }
+    }
+
+    const landmarkColors = {
+        thumb: 'red',
+        index: 'blue',
+        middle: 'yellow',
+        ring: 'green',
+        pinky: 'pink',
+        wrist: 'white'
+    }
+
+    const gestureStrings = {
+    'thumbs_up': '➡️',
+    'victory': '⬅️'
+    }
+
+    async function createDetector() {
+    return window.handPoseDetection.createDetector(
+        window.handPoseDetection.SupportedModels.MediaPipeHands,
+        {
+            runtime: "mediapipe",
+            modelType: "full",
+            maxHands: 2,
+            solutionPath: `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1646424915`,
+        }
+    )
+    }
+
+    let tip = {x:0, y:0}
+    let base = {x:0, y:0}
+    let pos = {x:400, y:50}
+    let selection = -1;
+
+    async function main() {
+
+        const video = document.querySelector("#pose-video")
+        const canvas = document.querySelector("#pose-canvas")
+        const ctx = canvas.getContext("2d")
+
+        const dcanvas = document.querySelector("#can")
+        const dctx = dcanvas.getContext("2d")
+
+        const resultLayer = {
+            right: document.querySelector("#pose-result-right"),
+            left: document.querySelector("#pose-result-left")
+        }
+        // configure gesture estimator
+        // add "✌🏻" and "👍" as sample gestures
+        const knownGestures = [
+            fp.Gestures.VictoryGesture,
+            fp.Gestures.ThumbsUpGesture
+        ]
+        const GE = new fp.GestureEstimator(knownGestures)
+        // load handpose model
+        const detector = await createDetector()
+        console.log("mediaPose model loaded")
+
+        const shirts = [
+            document.querySelector("#shirt1"),
+            document.querySelector("#shirt2"),
+            document.querySelector("#shirt3"),
+            document.querySelector("#shirt4"),
+            document.querySelector("#shirt5"),
+        ]
+        dctx.fillStyle = "white";
+        dctx.fillRect(0,0,800,400);
+        dctx.fillStyle = "blue";
+        dctx.fillRect(pos.x-10, pos.y-10, 20, 20);
+
+        // main estimation loop
+        const estimateHands = async () => {
+
+            // clear canvas overlay
+            ctx.clearRect(0, 0, config.video.width, config.video.height)
+            resultLayer.right.innerText = ''
+            resultLayer.left.innerText = ''
+
+            // get hand landmarks from video
+            const hands = await detector.estimateHands(video, {
+                flipHorizontal: true
+            })
+
+            let isHand = false;
+
+            for (const hand of hands) {
+                for (const keypoint of hand.keypoints) {
+                    const name = keypoint.name.split('_')[0].toString().toLowerCase()
+                    const color = landmarkColors[name]
+                    drawPoint(ctx, keypoint.x, keypoint.y, 3, color)
+
+                    if (hand.handedness === "Right") {
+                        if (keypoint.name === "index_finger_mcp") {
+                            base = {x: keypoint.x, y:keypoint.y}
+                        }
+                        if (keypoint.name === "index_finger_tip") {
+                            tip = {x: keypoint.x, y:keypoint.y}
+                        }
+                    }
+                }
+                if (hand.handedness === "Right") {
+                    isHand = true;
+                    vec = {x:tip.x-base.x, y:tip.y-base.y}
+                    mag = Math.sqrt(vec.x**2+vec.y**2)
+                    if (mag > 70) {
+                        vec.x/=mag; vec.y/=mag;
+                    } else {
+                        vec.x = 0; vec.y = 0;
+                    }
+                }
+
+            }
+
+            if (isHand) {
+                dctx.fillStyle = "white";
+                dctx.fillRect(0,0,800,400);
+                console.log("==================");
+                for (let shirt = 0 ; shirt < shirts.length; shirt++ ) {
+                    console.log(shirt);
+                    if (((800/5)*shirt) < pos.x && pos.x < ((800/5)*(shirt+1))) {
+                        dctx.drawImage(shirts[shirt], (800/5)*shirt-20, -20, (800/5)+40, 240)
+                        selection = shirt
+                        console.log(selection);
+                        continue;
+                    }
+                    dctx.drawImage(shirts[shirt], (800/5)*shirt, 0, (800/5), 200)
+                }
+                pos.x += vec.x*20;
+                pos.y += vec.y*20;
+                if (pos.x < 0) pos.x = 800;
+                if (pos.y < 0) pos.y = 200;
+                if (pos.x > 800) pos.x = 0;
+                if (pos.y > 200) pos.y = 0;
+                dctx.fillStyle = "blue";
+                dctx.fillRect(pos.x-10, pos.y-10, 20, 20);
+            }
+
+            if (selection != -1)
+            ctx.drawImage(shirts[selection], 0, 240, 600, 800);
+
+            // ...and so on
+            setTimeout(() => { estimateHands() }, 1000 / config.video.fps)
+        }
+
+        estimateHands()
+        console.log("Starting predictions")
+    }
+
+    async function initCamera(width, height, fps) {
+
+    const constraints = {
+        audio: false,
+        video: {
+            facingMode: "user",
+            width: width,
+            height: height,
+            frameRate: { max: fps }
+        }
+    }
+
+    const video = document.querySelector("#pose-video")
+    video.width = width
+    video.height = height
+
+    // get video stream
+    const stream = await navigator.mediaDevices.getUserMedia(constraints)
+    video.srcObject = stream
+
+    return new Promise(resolve => {
+            video.onloadedmetadata = () => { resolve(video) }
+        })
+    }
+
+    function drawPoint(ctx, x, y, r, color) {
+        ctx.beginPath()
+        ctx.arc(x, y, r, 0, 2 * Math.PI)
+        ctx.fillStyle = color
+        ctx.fill()
+    }
+
+    function updateDebugInfo(data, hand) {
+        const summaryTable = `#summary-${hand}`
+        for (let fingerIdx in data) {
+            document.querySelector(`${summaryTable} span#curl-${fingerIdx}`).innerHTML = data[fingerIdx][1]
+            document.querySelector(`${summaryTable} span#dir-${fingerIdx}`).innerHTML = data[fingerIdx][2]
+        }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+
+    initCamera(
+        config.video.width, config.video.height, config.video.fps
+    ).then(video => {
+        video.play()
+        video.addEventListener("loadeddata", event => {
+        console.log("Camera is ready")
+        main()
+        })
+    })
+
+    const canvas = document.querySelector("#pose-canvas")
+    canvas.width = config.video.width
+    canvas.height = config.video.height
+    console.log("Canvas initialized")
+    });
+        </script>
+    </body>
+</html>
